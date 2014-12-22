@@ -979,7 +979,7 @@ static void CheckReadWrite(RLMRealm *realm, NSString *msg=@"Cannot write to a re
     // shut down if there's no longer any RLMRealms alive for this path
     if (_realms.count == 0) {
         if (_sharedGroup)
-        _sharedGroup->wait_for_change_enable(false);
+        _sharedGroup->wait_for_change_release();
         // wait for the thread to wake up tear down the SharedGroup to ensure
         // that it doesn't continue to care about the files on disk after the
         // last RLMRealm instance for them is deallocated

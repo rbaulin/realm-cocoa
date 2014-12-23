@@ -13,6 +13,8 @@ x.x.x Release notes (yyyy-MM-dd)
 
 * Fix an assertion failure when invalidating a Realm which is in a write
   transaction, has already been invalidated, or has never been used.
+* Roll back all changes when an error occurs during  a migration rather than
+  committing the half-migrated state.
 
 0.89.1 Release notes (2014-12-22)
 =============================================================

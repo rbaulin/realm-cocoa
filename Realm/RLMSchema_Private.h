@@ -51,7 +51,7 @@ inline NSString *RLMTableNameForClass(NSString *className) {
 
 // create any metadata tables that don't already exist
 // must be in write transaction to set
-void RLMRealmCreateMetadataTables(RLMRealm *realm);
+bool RLMRealmCreateMetadataTables(RLMRealm *realm);
 
 NSUInteger RLMRealmSchemaVersion(RLMRealm *realm);
 

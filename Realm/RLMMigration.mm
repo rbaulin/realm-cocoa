@@ -127,12 +127,38 @@
 }
 
 - (void)migrateWithBlock:(RLMMigrationBlock)block version:(NSUInteger)newVersion {
-    // start write transaction
+    // begin the write transaction before checking the existing schema version
+    // to avoid multiple threads/processes seeing an old version and deciding to
+    // run the migration
     [_realm beginWriteTransaction];
 
+    NSUInteger schemaVersion = RLMRealmSchemaVersion(_realm);
     @try {
+        if (schemaVersion == newVersion) {
+            // even if the version matches we may still need to add new tables
+            if (RLMRealmCreateTables(_realm, RLMSchema.sharedSchema, newVersion, false)) {
+                [_realm commitWriteTransaction];
+            }
+            else {
+                [_realm cancelWriteTransaction];
+            }
+            return;
+        }
+        else if (schemaVersion > newVersion && schemaVersion != RLMNotVersioned) {
+            if (!block) {
+                @throw [NSException exceptionWithName:@"RLMException"
+                                               reason:@"No migration block specified for a Realm with a schema version greater than 0. You must supply a valid schema version and migration block before accessing any Realm by calling `setSchemaVersion:withMigrationBlock:`"
+                                             userInfo:@{@"path" : _realm.path}];
+            }
+            else {
+                @throw [NSException exceptionWithName:@"RLMException"
+                                               reason:@"Realm version is higher than the current version provided to `setSchemaVersion:withMigrationBlock:`"
+                                             userInfo:@{@"path" : _realm.path}];
+            }
+        }
+
         // add new tables/columns for the current shared schema
-        RLMRealmCreateTables(_realm, [RLMSchema sharedSchema], true);
+        RLMRealmCreateTables(_realm, [RLMSchema sharedSchema], newVersion, true);
 
         // disable all primary keys for migration
         for (RLMObjectSchema *objectSchema in _realm.schema.objectSchema) {
@@ -149,10 +175,12 @@
         // update new version
         RLMRealmSetSchemaVersion(_realm, newVersion);
     }
-    @finally {
-        // end transaction
-        [_realm commitWriteTransaction];
+    @catch (...) {
+        [_realm cancelWriteTransaction];
+        @throw;
     }
+
+    [_realm commitWriteTransaction];
 }
 
 -(RLMObject *)createObject:(NSString *)className withObject:(id)object {

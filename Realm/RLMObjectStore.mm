@@ -109,22 +109,28 @@ static void RLMCreateColumn(RLMRealm *realm, tightdb::Table &table, RLMProperty 
     }
 }
 
-
-// Schema used to created generated accessors
-static NSMutableArray *s_accessorSchema;
-
 void RLMRealmCreateAccessors(RLMSchema *schema) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        s_accessorSchema = [NSMutableArray new];
-    });
+    // Schema used to created generated accessors
+    static NSMutableArray * const s_accessorSchema = [NSMutableArray new];
 
     // create accessors for non-dynamic realms
     RLMSchema *matchingSchema = nil;
-    for (RLMSchema *accessorSchema in s_accessorSchema) {
-        if ([schema isEqualToSchema:accessorSchema]) {
-            matchingSchema = accessorSchema;
-            break;
+    @synchronized(s_accessorSchema) {
+        for (RLMSchema *accessorSchema in s_accessorSchema) {
+            if ([schema isEqualToSchema:accessorSchema]) {
+                matchingSchema = accessorSchema;
+                break;
+            }
+        }
+
+        if (!matchingSchema) {
+            // create accessors and cache in s_accessorSchema
+            for (RLMObjectSchema *objectSchema in schema.objectSchema) {
+                NSString *prefix = [NSString stringWithFormat:@"RLMAccessor_v%lu_",
+                                    (unsigned long)s_accessorSchema.count];
+                objectSchema.accessorClass = RLMAccessorClassForObjectClass(objectSchema.objectClass, objectSchema, prefix);
+            }
+            [s_accessorSchema addObject:[schema copy]];
         }
     }
 
@@ -133,14 +139,6 @@ void RLMRealmCreateAccessors(RLMSchema *schema) {
         for (RLMObjectSchema *objectSchema in schema.objectSchema) {
             objectSchema.accessorClass = matchingSchema[objectSchema.className].accessorClass;
         }
-    }
-    else {
-        // create accessors and cache in s_accessorSchema
-        for (RLMObjectSchema *objectSchema in schema.objectSchema) {
-            NSString *prefix = [NSString stringWithFormat:@"RLMAccessor_v%lu_", (unsigned long)s_accessorSchema.count];
-            objectSchema.accessorClass = RLMAccessorClassForObjectClass(objectSchema.objectClass, objectSchema, prefix);
-        }
-        [s_accessorSchema addObject:[schema copy]];
     }
 }
 
@@ -159,8 +157,15 @@ void RLMRealmSetSchema(RLMRealm *realm, RLMSchema *targetSchema, bool verify) {
 }
 
 
-void RLMRealmCreateTables(RLMRealm *realm, RLMSchema *targetSchema, bool updateExisting) {
+bool RLMRealmCreateTables(RLMRealm *realm, RLMSchema *targetSchema,
+                          NSUInteger schemaVersion, bool updateExisting) {
     realm.schema = [targetSchema copy];
+
+    bool anyChanged = RLMRealmCreateMetadataTables(realm);
+    if (RLMRealmSchemaVersion(realm) == RLMNotVersioned) {
+        RLMRealmSetSchemaVersion(realm, schemaVersion);
+        anyChanged = true;
+    }
 
     // first pass to create missing tables
     NSMutableArray *objectSchemaToUpdate = [NSMutableArray array];
@@ -172,6 +177,7 @@ void RLMRealmCreateTables(RLMRealm *realm, RLMSchema *targetSchema, bool updateE
         if (updateExisting || created) {
             [objectSchemaToUpdate addObject:objectSchema];
         }
+        anyChanged |= created;
     }
 
     // second pass adds/removes columns for objectSchemaToUpdate
@@ -183,6 +189,7 @@ void RLMRealmCreateTables(RLMRealm *realm, RLMSchema *targetSchema, bool updateE
             // add any new properties (new name or different type)
             if (!tableSchema[prop.name] || ![prop isEqualToProperty:tableSchema[prop.name]]) {
                 RLMCreateColumn(realm, *objectSchema->_table, prop);
+                anyChanged = true;
             }
         }
 
@@ -191,6 +198,7 @@ void RLMRealmCreateTables(RLMRealm *realm, RLMSchema *targetSchema, bool updateE
             RLMProperty *prop = tableSchema.properties[i];
             if (!objectSchema[prop.name] || ![prop isEqualToProperty:objectSchema[prop.name]]) {
                 objectSchema->_table->remove_column(prop.column);
+                anyChanged = true;
             }
         }
 
@@ -199,11 +207,13 @@ void RLMRealmCreateTables(RLMRealm *realm, RLMSchema *targetSchema, bool updateE
             // if there is a primary key set, check if it is the same as the old key
             if (tableSchema.primaryKeyProperty == nil || ![tableSchema.primaryKeyProperty isEqual:objectSchema.primaryKeyProperty]) {
                 RLMRealmSetPrimaryKeyForObjectClass(realm, objectSchema.className, objectSchema.primaryKeyProperty.name);
+                anyChanged = true;
             }
         }
         else if (tableSchema.primaryKeyProperty) {
             // there is no primary key, so if thre was one nil out
             RLMRealmSetPrimaryKeyForObjectClass(realm, objectSchema.objectClass, nil);
+            anyChanged = true;
         }
     }
 
@@ -214,6 +224,8 @@ void RLMRealmCreateTables(RLMRealm *realm, RLMSchema *targetSchema, bool updateE
         RLMObjectSchema *tableSchema = [RLMObjectSchema schemaFromTableForClassName:objectSchema.className realm:realm];
         RLMVerifyAndAlignColumns(tableSchema, objectSchema);
     }
+
+    return anyChanged;
 }
 
 

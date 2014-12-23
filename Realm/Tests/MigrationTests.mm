@@ -83,11 +83,13 @@ extern "C" {
     objectSchema.properties = @[objectSchema.properties[0]];
 
     // create realm with old schema and populate
-    RLMRealm *realm = [self realmWithSingleObject:objectSchema];
-    [realm beginWriteTransaction];
-    [realm createObject:MigrationObject.className withObject:@[@1]];
-    [realm createObject:MigrationObject.className withObject:@[@2]];
-    [realm commitWriteTransaction];
+    @autoreleasepool {
+        RLMRealm *realm = [self realmWithSingleObject:objectSchema];
+        [realm beginWriteTransaction];
+        [realm createObject:MigrationObject.className withObject:@[@1]];
+        [realm createObject:MigrationObject.className withObject:@[@2]];
+        [realm commitWriteTransaction];
+    }
 
     // open realm with new schema before migration to test migration is necessary
     objectSchema = [RLMObjectSchema schemaForObjectClass:MigrationObject.class];
@@ -108,7 +110,7 @@ extern "C" {
     [RLMRealm migrateRealmAtPath:RLMTestRealmPath()];
 
     // verify migration
-    realm = [self realmWithTestPath];
+    RLMRealm *realm = [self realmWithTestPath];
     MigrationObject *mig1 = [MigrationObject allObjectsInRealm:realm][1];
     XCTAssertEqual(mig1.intCol, 2, @"Int column should have value 2");
     XCTAssertEqualObjects(mig1.stringCol, @"2", @"String column should be populated");

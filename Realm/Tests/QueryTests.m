@@ -66,6 +66,13 @@
 @implementation QueryObject
 @end
 
+@interface QueryLinkObject : RLMObject
+@property QueryObject *query;
+@end
+
+@implementation QueryLinkObject
+@end
+
 #pragma mark - Tests
 
 @interface QueryTests : RLMTestCase
@@ -543,6 +550,10 @@
     [QueryObject createInRealm:realm withObject:@[@YES, @NO,  @15, @8, @1.0f,  @66.0f, @1.01, @9.99, @"Instance 5"]];
     [QueryObject createInRealm:realm withObject:@[@NO,  @YES, @15, @15, @1.0f,  @66.0f, @1.01, @9.99, @"Instance 6"]];
 
+    for (QueryObject *queryObject in QueryObject.allObjects) {
+        [QueryLinkObject createInRealm:realm withObject:@[queryObject]];
+    }
+
     [realm commitWriteTransaction];
 
     XCTAssertEqual(7U, [QueryObject objectsWhere:@"bool1 == bool1"].count);
@@ -572,6 +583,34 @@
     XCTAssertEqual(6U, [QueryObject objectsWhere:@"double1 < double2"].count);
     XCTAssertEqual(1U, [QueryObject objectsWhere:@"double1 >= double2"].count);
     XCTAssertEqual(6U, [QueryObject objectsWhere:@"double1 <= double2"].count);
+
+    XCTAssertEqual(7U, [QueryObject objectsWhere:@"query.bool1 == query.bool1"].count);
+    XCTAssertEqual(3U, [QueryObject objectsWhere:@"query.bool1 == query.bool2"].count);
+    XCTAssertEqual(4U, [QueryObject objectsWhere:@"query.bool1 != query.bool2"].count);
+
+    XCTAssertEqual(7U, [QueryObject objectsWhere:@"query.int1 == query.int1"].count);
+    XCTAssertEqual(2U, [QueryObject objectsWhere:@"query.int1 == query.int2"].count);
+    XCTAssertEqual(5U, [QueryObject objectsWhere:@"query.int1 != query.int2"].count);
+    XCTAssertEqual(1U, [QueryObject objectsWhere:@"query.int1 > query.int2"].count);
+    XCTAssertEqual(4U, [QueryObject objectsWhere:@"query.int1 < query.int2"].count);
+    XCTAssertEqual(3U, [QueryObject objectsWhere:@"query.int1 >= query.int2"].count);
+    XCTAssertEqual(6U, [QueryObject objectsWhere:@"query.int1 <= query.int2"].count);
+
+    XCTAssertEqual(7U, [QueryObject objectsWhere:@"query.float1 == query.float1"].count);
+    XCTAssertEqual(1U, [QueryObject objectsWhere:@"query.float1 == query.float2"].count);
+    XCTAssertEqual(6U, [QueryObject objectsWhere:@"query.float1 != query.float2"].count);
+    XCTAssertEqual(2U, [QueryObject objectsWhere:@"query.float1 > query.float2"].count);
+    XCTAssertEqual(4U, [QueryObject objectsWhere:@"query.float1 < query.float2"].count);
+    XCTAssertEqual(3U, [QueryObject objectsWhere:@"query.float1 >= query.float2"].count);
+    XCTAssertEqual(5U, [QueryObject objectsWhere:@"query.float1 <= query.float2"].count);
+
+    XCTAssertEqual(7U, [QueryObject objectsWhere:@"query.double1 == query.double1"].count);
+    XCTAssertEqual(0U, [QueryObject objectsWhere:@"query.double1 == query.double2"].count);
+    XCTAssertEqual(7U, [QueryObject objectsWhere:@"query.double1 != query.double2"].count);
+    XCTAssertEqual(1U, [QueryObject objectsWhere:@"query.double1 > query.double2"].count);
+    XCTAssertEqual(6U, [QueryObject objectsWhere:@"query.double1 < query.double2"].count);
+    XCTAssertEqual(1U, [QueryObject objectsWhere:@"query.double1 >= query.double2"].count);
+    XCTAssertEqual(6U, [QueryObject objectsWhere:@"query.double1 <= query.double2"].count);
 
 #define AssertThrowsWithReason(expr, desc) \
     @try { \
